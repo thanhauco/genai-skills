@@ -1,0 +1,39 @@
+# Core (most modules run with just these)
+# Standard library covers async, profiling, load-gen simulations.
+
+# --- Optional: only needed for specific files (clearly marked in code) ---
+# Uncomment as needed; modules degrade gracefully (mock fallbacks) if missing.
+
+# HTTP / API clients
+httpx>=0.27
+requests>=2.31
+
+# OpenAI-compatible SDK (Fireworks, vLLM, SGLang all speak this)
+openai>=1.40
+
+# Tokenization
+tiktoken>=0.7
+# transformers tokenizer + modeling (heavy)
+# transformers>=4.44
+# torch>=2.3            # GPU/CPU; large download
+# accelerate>=0.33
+
+# Fine-tuning stack (heavy; GPU recommended)
+# peft>=0.12
+# datasets>=2.20
+# trl>=0.9             # SFT/DPO trainers
+# bitsandbytes>=0.43   # QLoRA (Linux/CUDA)
+
+# Serving (GPU + Linux typically)
+# vllm>=0.5
+# sglang>=0.2
+
+# Evaluation
+# numpy>=1.26
+
+# Load testing
+# locust>=2.29
+
+# Dev
+# pytest>=8.0
+# rich>=13.7           # nicer CLI output (optional)
