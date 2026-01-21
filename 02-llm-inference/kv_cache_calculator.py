@@ -121,7 +121,7 @@ def main() -> None:
         "\nField-engineer translation:\n"
         "  'On 2xH100, moving 70B from fp16 to fp8 roughly doubles the KV budget,\n"
         "   which lets us run ~2x the concurrent requests at the same latency,\n"
-        "   cutting $/1M tokens — pending an eval gate on your task.'"
+        "   cutting $/1M tokens - pending an eval gate on your task.'"
     )
 
 

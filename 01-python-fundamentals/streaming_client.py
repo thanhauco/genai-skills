@@ -97,7 +97,7 @@ def main() -> None:
     print(f"tokens/s   : {stats.tokens_per_s:6.1f}")
     print(f"total      : {stats.total_s*1000:6.1f} ms")
     print(
-        "\nInterview line: 'Total latency ≈ TTFT + (out_tokens-1) × TPOT. "
+        "\nInterview line: 'Total latency ~= TTFT + (out_tokens-1) x TPOT. "
         "We optimize TTFT with prefill tricks and TPOT with batching/quantization.'"
     )
 
