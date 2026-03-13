@@ -1,0 +1,77 @@
+# Autoscaling LLM serving on Kubernetes.
+#
+# IMPORTANT: CPU% is a BAD autoscale signal for LLM serving — pods are GPU/queue
+# bound, not CPU bound. The CPU-based HPA below is shown as a baseline, but the
+# RIGHT approach is a custom/external metric (queue depth, GPU util, in-flight
+# requests) via KEDA or the Prometheus Adapter. Notes at the bottom.
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: vllm-llama31-8b
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: vllm-llama31-8b
+  minReplicas: 2
+  maxReplicas: 8
+  metrics:
+    # --- Baseline (weak) trigger: CPU. Shown for completeness only. ---
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    # --- Better: scale on a custom per-pod metric exposed via Prometheus Adapter.
+    #     e.g. average number of requests waiting in the vLLM queue per pod.
+    - type: Pods
+      pods:
+        metric:
+          name: vllm_num_requests_waiting     # exported by vLLM /metrics + Prometheus Adapter
+        target:
+          type: AverageValue
+          averageValue: "5"                    # scale up when avg queue depth > 5
+  behavior:
+    scaleUp:
+      # Model load is slow (cold start). Scale up promptly but avoid flapping.
+      stabilizationWindowSeconds: 0
+      policies:
+        - type: Pods
+          value: 2
+          periodSeconds: 60
+    scaleDown:
+      # Scale down conservatively so you don't thrash expensive GPU pods.
+      stabilizationWindowSeconds: 300
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 120
+---
+# KEDA alternative (recommended for event/queue-driven LLM workloads):
+#
+# apiVersion: keda.sh/v1alpha1
+# kind: ScaledObject
+# metadata:
+#   name: vllm-scaledobject
+# spec:
+#   scaleTargetRef:
+#     name: vllm-llama31-8b
+#   minReplicaCount: 2
+#   maxReplicaCount: 8
+#   triggers:
+#     - type: prometheus
+#       metadata:
+#         serverAddress: http://prometheus.monitoring:9090
+#         metricName: vllm_num_requests_waiting
+#         query: avg(vllm_num_requests_waiting)
+#         threshold: "5"
+#
+# Why custom metrics > CPU for LLM autoscaling:
+#   - GPU compute, not CPU, is the bottleneck; CPU% barely moves under load.
+#   - Queue depth / in-flight requests / time-in-queue track real saturation.
+#   - GPU utilization (via DCGM exporter) is another good signal.
+#   - Account for SLOW scale-up: a new GPU pod takes minutes to pull + load the
+#     model. Keep warm headroom (minReplicas) and scale up early/aggressively,
+#     scale down slowly. Consider node-pool autoscaling for GPU capacity too.
