@@ -1,0 +1,112 @@
+# vLLM OpenAI-compatible server on Kubernetes (GPU).
+# Apply: kubectl apply -f vllm-deployment.yaml
+# Validate locally (no cluster): kubectl apply --dry-run=client -f vllm-deployment.yaml
+#
+# Every non-obvious field is annotated with WHY a Field Engineer sets it.
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vllm-llama31-8b
+  labels:
+    app: vllm-llama31-8b
+spec:
+  replicas: 2                      # start with 2 for availability; HPA adjusts (see hpa.yaml)
+  selector:
+    matchLabels:
+      app: vllm-llama31-8b
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0            # never drop below desired during a rollout (GPU pods are slow to start)
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app: vllm-llama31-8b
+    spec:
+      # Land on GPU nodes only. Adjust the label to your cloud/node pool.
+      nodeSelector:
+        cloud.google.com/gke-accelerator: nvidia-h100-80gb   # GKE example; EKS/AKS differ
+      tolerations:
+        - key: nvidia.com/gpu       # GPU nodes are commonly tainted; tolerate it
+          operator: Exists
+          effect: NoSchedule
+      containers:
+        - name: vllm
+          image: vllm/vllm-openai:latest   # pin a version in production, not :latest
+          args:
+            - "--model"
+            - "meta-llama/Llama-3.1-8B-Instruct"
+            - "--port"
+            - "8000"
+            - "--max-model-len"
+            - "8192"                 # cap context -> bounds KV cache allocation
+            - "--gpu-memory-utilization"
+            - "0.90"                 # how much HBM to claim for weights+KV
+            - "--enable-prefix-caching"   # reuse shared prompt prefixes (RAG/agents)
+          ports:
+            - containerPort: 8000
+          env:
+            - name: HUGGING_FACE_HUB_TOKEN     # gated models need auth
+              valueFrom:
+                secretKeyRef:
+                  name: hf-token               # kubectl create secret generic hf-token --from-literal=token=...
+                  key: token
+          resources:
+            limits:
+              nvidia.com/gpu: 1      # WHOLE GPU(s); for nvidia.com/gpu request must equal limit
+              cpu: "8"
+              memory: 32Gi
+            requests:
+              nvidia.com/gpu: 1
+              cpu: "4"
+              memory: 24Gi
+          volumeMounts:
+            - name: dshm
+              mountPath: /dev/shm    # NCCL / tensor-parallel needs large shared memory
+            - name: model-cache
+              mountPath: /root/.cache/huggingface   # cache weights to speed restarts
+          # Model load is SLOW (download + load to GPU). startupProbe guards the long boot,
+          # so liveness doesn't kill the pod before it's ready.
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            failureThreshold: 60     # 60 * 10s = up to 10 min to come up
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            periodSeconds: 10
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            periodSeconds: 20
+            failureThreshold: 3
+      volumes:
+        - name: dshm
+          emptyDir:
+            medium: Memory           # /dev/shm backed by RAM for NCCL
+            sizeLimit: 8Gi
+        - name: model-cache
+          emptyDir: {}               # swap for a PVC to persist weights across pod restarts
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vllm-llama31-8b
+spec:
+  type: ClusterIP                    # front with an Ingress/Gateway for external access
+  selector:
+    app: vllm-llama31-8b
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8000
+# Smoke test from inside the cluster:
+#   kubectl run curl --rm -it --image=curlimages/curl -- \
+#     curl -s http://vllm-llama31-8b/v1/models
