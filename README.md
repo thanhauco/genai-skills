@@ -1,6 +1,6 @@
 # Fireworks AI Field Engineer — Interview Prep Repo
 
-A hands-on, runnable repository to prepare for the **AI Field Engineer (AI Native segment)** role at Fireworks AI. Every skill in the job description is mapped to a module with working code, study notes, and interview drills.
+A hands-on, runnable repository to prepare for the **AI Engineer (AI Native segment)** role. Every skill in the job description is mapped to a module with working code, study notes, and interview drills.
 
 > Field Engineers are "the technical tip of the spear" — hands-on-keyboard building POCs/MVPs and production integrations, while holding executive-level architecture conversations. This repo is structured to make you fluent on **both** axes.
 
