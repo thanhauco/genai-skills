@@ -1,0 +1,10 @@
+# Dev / test dependencies — enough to run the test suite and the "real path"
+# demos. The core learning modules still run with the standard library only.
+
+pytest>=8.0
+
+# Unlocks exact token counts in 02-llm-inference/tokenization_demo.py
+tiktoken>=0.7
+
+# Unlocks the LoRA math demo (numpy) in 04-fine-tuning/sft_lora_example.py
+numpy>=1.26
